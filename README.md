@@ -32,11 +32,33 @@ c.Range(func(key string, value interface{})bool{
 })
 
 // 移除一个缓存对象
-c.RemoveItem("num")
+c.Delete("num")
 // 获取缓存数量
 count := c.Len()
 // 清空缓存
 c.Flush()
+```
+
+全局缓存
+```golang
+// 初始化全局缓存
+options := &cache.Options{}
+cache.Init(options)
+
+// 保存一个对象
+cache.Set("num", 123)
+
+// 取出对象
+if value, ok := cache.Get("num"); ok {
+    num := value.(int)
+    println(num)
+}
+
+// 移除一个缓存对象
+cache.Delete("num")
+
+// 获取全局缓存
+global := cache.Global()
 ```
 
 保存一个对象并设置过期时间

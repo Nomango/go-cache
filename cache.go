@@ -20,6 +20,8 @@ type Cache interface {
 	SetWithExpiration(key string, val interface{}, expiration time.Duration)
 	// Get 获取一个缓存对象
 	Get(key string) (value interface{}, found bool)
+	// Delete 删除一个缓存对象
+	Delete(key string)
 	// 实现ItemMap接口的所有方法
 	ItemMap
 }
@@ -33,11 +35,15 @@ type Options struct {
 
 // New 新建缓存器
 func New() Cache {
-	return NewWithOptions(&Options{})
+	return NewWithOptions(nil)
 }
 
 // NewWithOptions 新建缓存器
 func NewWithOptions(options *Options) Cache {
+	if options == nil {
+		options = &Options{}
+	}
+
 	var m ItemMap
 	if options.Capacity <= 0 {
 		// 无容量上限的缓存
@@ -51,7 +57,7 @@ func NewWithOptions(options *Options) Cache {
 		ItemMap: m,
 		options: options,
 	}
-	if options != nil && options.CleanInterval > 0 {
+	if options.CleanInterval > 0 {
 		// 启动cleaner协程
 		cleaner := newCleaner(c, options.CleanInterval)
 		// 创建包装器
@@ -92,4 +98,8 @@ func (c *cache) Get(key string) (value interface{}, found bool) {
 		return nil, false
 	}
 	return item.Value, true
+}
+
+func (c *cache) Delete(key string) {
+	c.RemoveItem(key)
 }

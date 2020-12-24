@@ -50,7 +50,7 @@ func TestLRUCache(t *testing.T) {
 	})
 
 	// 移除key2
-	c.RemoveItem("key2")
+	c.Delete("key2")
 	value, found = c.Get("key2")
 	assert.Equal(t, found, false)
 	assert.Equal(t, value, nil)

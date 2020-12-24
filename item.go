@@ -9,7 +9,7 @@ import (
 // Item 缓存项
 type Item struct {
 	Value       interface{}
-	expiredTime *time.Time
+	ExpiredTime *time.Time
 }
 
 func NewItem(val interface{}, expiration time.Duration) *Item {
@@ -19,17 +19,17 @@ func NewItem(val interface{}, expiration time.Duration) *Item {
 	expiredTime := time.Now().Add(expiration)
 	return &Item{
 		Value:       val,
-		expiredTime: &expiredTime,
+		ExpiredTime: &expiredTime,
 	}
 }
 
 // IsExpired 对象是否过期
 func (i *Item) IsExpired() bool {
-	if i.expiredTime == nil {
+	if i.ExpiredTime == nil {
 		// 永不过期的对象
 		return false
 	}
-	return time.Now().After(*i.expiredTime)
+	return time.Now().After(*i.ExpiredTime)
 }
 
 // ItemMap
