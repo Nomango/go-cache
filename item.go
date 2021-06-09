@@ -54,13 +54,15 @@ type ItemMap interface {
 var _ ItemMap = &itemMap{}
 
 type itemMap struct {
-	items atomic.Value // 实际是*sync.Map类型
-	count int64
+	items     atomic.Value // 实际是*sync.Map类型
+	count     int64
+	deletedCb DeletedCallback
 }
 
-func newItemMap() ItemMap {
+func newItemMap(deletedCb DeletedCallback) ItemMap {
 	m := &itemMap{}
 	m.items.Store(&sync.Map{})
+	m.deletedCb = deletedCb
 	return m
 }
 
@@ -78,16 +80,31 @@ func (m *itemMap) GetItem(key string) (*Item, bool) {
 }
 
 func (m *itemMap) AddItem(key string, val *Item) {
+	_, ok := m.getItems().Load(key)
+	if !ok {
+		atomic.AddInt64(&m.count, 1)
+	}
 	m.getItems().Store(key, val)
-	atomic.AddInt64(&m.count, 1)
 }
 
 func (m *itemMap) RemoveItem(key string) {
-	m.getItems().Delete(key)
-	atomic.AddInt64(&m.count, -1)
+	val, ok := m.getItems().Load(key)
+	if ok {
+		m.remove(key, val.(*Item))
+	}
 }
 
 func (m *itemMap) Flush() {
+	if m.deletedCb != nil {
+		// 逐个删除
+		m.getItems().Range(func(key, val interface{}) bool {
+			m.remove(key.(string), val.(*Item))
+			return true
+		})
+		return
+	}
+
+	// 直接替换新的map
 	m.items.Store(&sync.Map{})
 	atomic.StoreInt64(&m.count, 0)
 }
@@ -120,8 +137,17 @@ func (m *itemMap) ClearExpired() {
 	m.getItems().Range(func(key, val interface{}) bool {
 		item := val.(*Item)
 		if item.IsExpired() {
-			m.RemoveItem(key.(string))
+			m.remove(key.(string), item)
 		}
 		return true
 	})
+}
+
+func (m *itemMap) remove(key string, item *Item) {
+	m.getItems().Delete(key)
+	atomic.AddInt64(&m.count, -1)
+
+	if m.deletedCb != nil {
+		m.deletedCb(key, item.Value)
+	}
 }

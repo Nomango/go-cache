@@ -12,6 +12,8 @@ type lruItemMap struct {
 	capacity int
 	// LRU链表
 	list *list.List
+
+	deletedCb DeletedCallback
 }
 
 // lruNode 链表节点
@@ -20,11 +22,12 @@ type lruNode struct {
 	item *Item
 }
 
-func newLRUItemMap(capacity int) ItemMap {
+func newLRUItemMap(capacity int, deletedCb DeletedCallback) ItemMap {
 	return &lruItemMap{
-		items:    make(map[string]*list.Element, capacity),
-		capacity: capacity,
-		list:     list.New(),
+		items:     make(map[string]*list.Element, capacity),
+		capacity:  capacity,
+		list:      list.New(),
+		deletedCb: deletedCb,
 	}
 }
 
@@ -75,14 +78,23 @@ func (m *lruItemMap) RemoveItem(key string) {
 	defer m.mu.Unlock()
 	elem, ok := m.items[key]
 	if ok {
-		m.list.Remove(elem)
-		delete(m.items, key)
+		m.remove(key, elem)
 	}
 }
 
 func (m *lruItemMap) Flush() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.deletedCb != nil {
+		// 逐个删除
+		for key, elem := range m.items {
+			m.remove(key, elem)
+		}
+		return
+	}
+
+	// 直接替换新的map
 	m.items = make(map[string]*list.Element)
 	m.list = list.New()
 }
@@ -118,8 +130,7 @@ func (m *lruItemMap) ClearExpired() {
 	for key, elem := range m.items {
 		node := elem.Value.(*lruNode)
 		if node.item.IsExpired() {
-			m.list.Remove(elem)
-			delete(m.items, key)
+			m.remove(key, elem)
 			count++
 		}
 
@@ -130,10 +141,21 @@ func (m *lruItemMap) ClearExpired() {
 		// |1w           |4.749823ms    |
 		// |10w          |53.20541ms    |
 		// |100w         |806.008161ms  |
-		// 当删除对象数量不超过1w时，一次清理操作耗时<10ms，可以做到用户无感知
+		// 当删除对象数量不超过1k时，一次清理操作耗时<1ms，可以做到用户无感知
 		// LRU限制了对象容量，且cache.Get方法也会清理过期对象，故不需要担心清理不及时导致的内存问题
-		if count > 10000 {
+		if count > 1000 {
 			break
 		}
+	}
+}
+
+func (m *lruItemMap) remove(key string, elem *list.Element) {
+	removedNode := elem.Value.(*lruNode)
+	m.list.Remove(elem)
+
+	delete(m.items, key)
+
+	if m.deletedCb != nil {
+		m.deletedCb(key, removedNode.item.Value)
 	}
 }

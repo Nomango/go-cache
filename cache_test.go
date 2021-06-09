@@ -23,6 +23,11 @@ func TestCache(t *testing.T) {
 	c.Set("key2", num2)
 	assert.Equal(t, c.Len(), 2)
 
+	// 覆盖key2
+	num2 = rand.Int63()
+	c.Set("key2", num2)
+	assert.Equal(t, c.Len(), 2)
+
 	// 测试取出
 	value, found := c.Get("key1")
 	assert.Equal(t, found, true)
@@ -48,6 +53,13 @@ func TestCache(t *testing.T) {
 	})
 
 	// 移除key2
+	c.Delete("key2")
+	value, found = c.Get("key2")
+	assert.Equal(t, found, false)
+	assert.Equal(t, value, nil)
+	assert.Equal(t, c.Len(), 1)
+
+	// 再次移除key2
 	c.Delete("key2")
 	value, found = c.Get("key2")
 	assert.Equal(t, found, false)
@@ -157,4 +169,60 @@ func TestCacheCleanUp(t *testing.T) {
 	c = nil
 	runtime.GC()
 	time.Sleep(time.Millisecond * 500)
+}
+
+func TestCacheWithCallback(t *testing.T) {
+
+	count := 0
+	deletedCb := func(key string, v interface{}) {
+		count--
+		_, ok := v.(int64)
+		assert.True(t, ok)
+	}
+
+	options := &cache.Options{
+		DeletedCallback: deletedCb,
+	}
+	c := cache.NewWithOptions(options)
+	assert.Equal(t, c.Len(), 0)
+
+	// 保存两个不过期的对象
+	c.Set("key1", rand.Int63())
+	count++
+
+	c.Set("key2", rand.Int63())
+	count++
+
+	// 移除key2
+	c.Delete("key2")
+	assert.Equal(t, count, 1)
+
+	// 再次移除key2
+	c.Delete("key2")
+	assert.Equal(t, count, 1)
+
+	// 保存一个会过期的对象
+	expiration := time.Second * 1
+	c.SetWithExpiration("key3", rand.Int63(), expiration)
+	count++
+
+	startTime := time.Now()
+	for {
+		time.Sleep(time.Millisecond * 200)
+		deltaTime := time.Now().Sub(startTime)
+		// 手动清理缓存
+		c.ClearExpired()
+		if deltaTime < expiration {
+			// 两个对象应该都未清掉
+			assert.Equal(t, count, 2)
+			continue
+		}
+		// 其中一个对象被清掉
+		assert.Equal(t, count, 1)
+		break
+	}
+
+	// 清空缓存
+	c.Flush()
+	assert.Equal(t, count, 0)
 }

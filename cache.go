@@ -26,11 +26,19 @@ type Cache interface {
 	ItemMap
 }
 
+// DeletedCallback 缓存对象被删除时的回调函数
+type DeletedCallback func(string, interface{})
+
 // Options 缓存选项
+// @DefaultExpiration 默认的过期时长
+// @CleanInterval 自动清理时间间隔
+// @Capacity 容量，设置后将启用LRU
+// @DeletedCallback 缓存对象被删除时的回调函数
 type Options struct {
 	DefaultExpiration time.Duration
 	CleanInterval     time.Duration
 	Capacity          int
+	DeletedCallback   DeletedCallback
 }
 
 // New 新建缓存器
@@ -47,10 +55,10 @@ func NewWithOptions(options *Options) Cache {
 	var m ItemMap
 	if options.Capacity <= 0 {
 		// 无容量上限的缓存
-		m = newItemMap()
+		m = newItemMap(options.DeletedCallback)
 	} else {
 		// LRU缓存
-		m = newLRUItemMap(options.Capacity)
+		m = newLRUItemMap(options.Capacity, options.DeletedCallback)
 	}
 
 	c := &cache{
